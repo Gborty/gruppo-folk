@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f5a43">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Gruppo Folk</title>
+<style>
+:root{--bg:#eef1ee;--surf:#fff;--ink:#1d2a22;--mut:#5d6b62;--g:#2f5a43;--gl:#dbe8df;--r:#b3322f;--yl:#f8ecd0;--line:#d5dcd6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root{--bg:#141b17;--surf:#1d2721;--ink:#e8eee9;--mut:#9aaa9f;--g:#7fc29a;--gl:#27382d;--r:#ef7a77;--yl:#3a2f15;--line:#33423a;color-scheme:dark}}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;max-width:560px;margin:0 auto;padding-bottom:84px}
+h1,h2{font-family:Georgia,serif;margin:0}h1{font-size:25px;color:var(--g)}h2{font-size:20px;margin:10px 0}
+header{padding:18px 16px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+main{padding:0 16px}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.tap{cursor:pointer}.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.date{font-family:Georgia,serif;font-weight:700;color:var(--r);min-width:58px;text-align:center;line-height:1.1}.date b{font-size:26px;display:block}
+.mut{color:var(--mut);font-size:14px}
+.tag{border-radius:6px;padding:2px 8px;font-size:13px;font-weight:600;background:var(--gl);color:var(--g)}
+button,a.btn{font:inherit;cursor:pointer}
+.btn{display:inline-block;text-decoration:none;background:var(--g);color:var(--bg);border:0;border-radius:8px;padding:10px 14px;font-weight:600;margin:0 6px 8px 0}
+.btn.alt{background:var(--surf);color:var(--g);border:1px solid var(--g)}
+input,textarea{font:inherit;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surf);color:var(--ink);margin:4px 0 10px}
+label{font-size:14px;color:var(--mut)}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--surf);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav div{display:flex;max-width:560px;margin:0 auto}
+nav button{flex:1;background:none;border:0;padding:12px 4px;color:var(--mut);font-size:14px;border-top:3px solid transparent}
+nav button.on{color:var(--g);font-weight:700;border-top-color:var(--g)}
+.note{background:var(--yl);border-radius:8px;padding:10px 12px;font-size:14px;margin-bottom:10px}
+.disp dt{font-size:13px;color:var(--mut);margin-top:10px}.disp dd{margin:2px 0 0;font-size:17px}
+.back{background:none;border:0;color:var(--g);font-weight:600;padding:6px 0}
+.err{color:var(--r);font-size:14px;min-height:20px}
+</style>
+</head>
+<body>
+<header><h1>Gruppo Folk</h1><button class="btn alt" id="bell" style="display:none;margin:0" onclick="enablePush()">Attiva avvisi</button></header>
+<main id="app"><p class="mut">Caricamento…</p></main>
+<nav id="navwrap" style="display:none"><div id="nav"></div></nav>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getAuth,signInAnonymously,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc,addDoc,deleteDoc,collection,onSnapshot,query,orderBy} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import {getMessaging,getToken,isSupported} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDxRXoFhkrsZ0TdzsvKccEVNOWPu1Uudoo",
+  authDomain: "gruppo-folk-b2134.firebaseapp.com",
+  projectId: "gruppo-folk-b2134",
+  storageBucket: "gruppo-folk-b2134.firebasestorage.app",
+  messagingSenderId: "1083835155627",
+  appId: "1:1083835155627:web:ac48f2129be94f781763ee"
+};
+const VAPID = "BMJHRy38KuYwM2qALxRucre7xpYJYU0CwXLWtufw3i0Zg1BCaA6dI02BbgrsT2XBuO3DvRCouEjknm7IBe020XA";
+
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+let ruolo=null,uid=null,tab="serate",open=null,form=false,serate=[],msgs=[],unsub=[];
+const $=id=>document.getElementById(id),admin=()=>ruolo==="admin";
+const esc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fd=s=>new Date(s+"T12:00:00"),today=new Date().toISOString().slice(0,10);
+const full=s=>fd(s).toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"});
+const days=s=>Math.round((fd(s)-fd(today))/864e5);
+if("serviceWorker" in navigator)navigator.serviceWorker.register("firebase-messaging-sw.js").catch(()=>{});
+
+onAuthStateChanged(auth,async u=>{
+  if(!u){showLogin();return}
+  uid=u.uid;
+  try{const s=await getDoc(doc(db,"utenti",uid));if(s.exists()){ruolo=s.data().ruolo;start()}else showLogin()}
+  catch(e){showLogin()}
+});
+function showLogin(){
+  $("navwrap").style.display="none";$("bell").style.display="none";
+  $("app").innerHTML='<div class="card"><h2>Entra nel gruppo</h2><p class="mut">Inserisci il codice che ti ha dato il presidente.</p><input id="code" autocapitalize="characters" autocomplete="off" placeholder="Codice"><div class="err" id="err"></div><button class="btn" id="go">Entra</button></div>';
+  $("go").onclick=login;
+}
+async function login(){
+  const code=$("code").value.trim();if(!code)return;
+  $("err").textContent="Controllo…";
+  try{
+    if(!auth.currentUser)await signInAnonymously(auth);
+    const id=auth.currentUser.uid;
+    for(const r of["admin","socio"]){
+      try{await setDoc(doc(db,"utenti",id),{codice:code,ruolo:r});ruolo=r;uid=id;start();return}catch(e){}
+    }
+    $("err").textContent="Codice non valido. Controlla e riprova.";
+  }catch(e){$("err").textContent="Connessione non riuscita. Riprova."}
+}
+function start(){
+  $("navwrap").style.display="block";$("bell").style.display="block";
+  unsub.forEach(f=>f());
+  unsub=[
+    onSnapshot(query(collection(db,"serate"),orderBy("data")),s=>{serate=s.docs.map(d=>({id:d.id,...d.data()}));render()}),
+    onSnapshot(query(collection(db,"messaggi"),orderBy("data")),s=>{msgs=s.docs.map(d=>({id:d.id,...d.data()}));render()})
+  ];
+  render();
+}
+function render(){
+  if(!ruolo)return;
+  $("nav").innerHTML=[["serate","Serate"],["msg","Messaggi"]].map(t=>`<button class="${tab===t[0]?"on":""}" onclick="go('${t[0]}')">${t[1]}</button>`).join("");
+  $("app").innerHTML=tab==="serate"?vSerate():vMsg();
+}
+window.go=t=>{tab=t;open=null;form=false;render()};
+window.openS=id=>{open=id;render()};
+function vSerate(){
+  if(form)return formSerata();
+  if(open)return vDett(open);
+  const up=serate.filter(s=>s.data>=today);
+  let h="<h2>Calendario serate</h2>";
+  if(up[0]&&days(up[0].data)<=7){const n=days(up[0].data);h+=`<div class="note"><b>Promemoria:</b> prossima serata ${n===0?"oggi":n===1?"domani":"tra "+n+" giorni"} a ${esc(up[0].luogo)}, ritrovo ${esc(up[0].ritrovo)}.</div>`}
+  if(admin())h+='<button class="btn" onclick="form=true;render()">Nuova serata</button>';
+  if(!up.length)h+='<div class="card mut">Nessuna serata in programma.</div>';
+  return h+up.map(s=>`<div class="card row tap" onclick="openS('${s.id}')"><div class="date"><b>${fd(s.data).getDate()}</b>${fd(s.data).toLocaleDateString("it-IT",{month:"short"})}</div><div style="flex:1"><b>${esc(s.luogo)}</b><div class="mut">Ore ${esc(s.ora)} · ritrovo ${esc(s.ritrovo)}</div></div></div>`).join("");
+}
+function gcal(s){
+  const a=s.data.replace(/-/g,"")+"T"+s.ora.replace(":","")+"00",h=Math.min(parseInt(s.ora)+3,23),e=s.data.replace(/-/g,"")+"T"+String(h).padStart(2,"0")+s.ora.slice(3)+"00";
+  const det=`Ritrovo: ${s.ritrovo}\nAbbigliamento: ${s.abito}\nPortare: ${s.cosa}\n${s.nota}`;
+  return "https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent("Serata folk – "+s.luogo)+"&dates="+a+"/"+e+"&location="+encodeURIComponent(s.luogo)+"&details="+encodeURIComponent(det);
+}
+function vDett(id){
+  const s=serate.find(x=>x.id===id);if(!s){open=null;return vSerate()}
+  return `<button class="back" onclick="open=null;render()">‹ Tutte le serate</button><h2>${esc(s.luogo)}</h2><div class="mut" style="text-transform:capitalize">${full(s.data)} · ore ${esc(s.ora)}</div>
+  <div class="card"><dl class="disp"><dt>Ritrovo</dt><dd>${esc(s.ritrovo)}</dd><dt>Abbigliamento</dt><dd>${esc(s.abito)}</dd><dt>Cosa portare</dt><dd>${esc(s.cosa)}</dd><dt>Note</dt><dd>${esc(s.nota)}</dd></dl></div>
+  <a class="btn" href="${gcal(s)}" target="_blank" rel="noopener">Aggiungi a Google Calendar</a>${admin()?`<button class="btn alt" onclick="delS('${s.id}')">Elimina serata</button>`:""}`;
+}
+function formSerata(){
+  const d=new Date();d.setDate(d.getDate()+14);
+  return `<h2>Nuova serata</h2><div class="card"><label>Data</label><input type="date" id="f1" value="${d.toISOString().slice(0,10)}"><label>Ora di inizio</label><input type="time" id="f2" value="21:00"><label>Luogo</label><input id="f3"><label>Ritrovo (ora e punto)</label><input id="f4"><label>Abbigliamento</label><input id="f5"><label>Cosa portare</label><input id="f6"><label>Note</label><textarea id="f7" rows="2"></textarea><button class="btn" onclick="addS()">Salva serata</button><button class="btn alt" onclick="form=false;render()">Annulla</button></div>`;
+}
+window.addS=async()=>{
+  const l=$("f3").value.trim();if(!l){$("f3").focus();return}
+  try{await addDoc(collection(db,"serate"),{data:$("f1").value,ora:$("f2").value,luogo:l,ritrovo:$("f4").value,abito:$("f5").value,cosa:$("f6").value,nota:$("f7").value});form=false;render()}
+  catch(e){alert("Salvataggio non riuscito. Controlla la connessione.")}
+};
+window.delS=async id=>{if(confirm("Eliminare la serata?")){await deleteDoc(doc(db,"serate",id));open=null;render()}};
+function vMsg(){
+  let h="<h2>Comunicazioni</h2>";
+  if(admin())h+='<div class="card"><label>Titolo</label><input id="m1"><label>Messaggio</label><textarea id="m2" rows="3"></textarea><button class="btn" onclick="addM()">Pubblica messaggio</button></div>';
+  return h+msgs.slice().reverse().map(m=>`<div class="card"><div class="row"><b>${esc(m.titolo)}</b><span class="mut">${fd(m.data).toLocaleDateString("it-IT",{day:"numeric",month:"short"})}</span></div><div>${esc(m.testo)}</div></div>`).join("");
+}
+window.addM=async()=>{
+  const t=$("m1").value.trim();if(!t){$("m1").focus();return}
+  await addDoc(collection(db,"messaggi"),{data:today,titolo:t,testo:$("m2").value});render();
+};
+window.enablePush=async()=>{
+  try{
+    if(!(await isSupported())){alert("Su iPhone aggiungi prima l'app alla schermata Home (Condividi → Aggiungi a Home), poi riapri da lì e riprova.");return}
+    if(await Notification.requestPermission()!=="granted")return;
+    const reg=await navigator.serviceWorker.ready;
+    const token=await getToken(getMessaging(app),{vapidKey:VAPID,serviceWorkerRegistration:reg});
+    await setDoc(doc(db,"tokens",uid),{token,ruolo});
+    alert("Avvisi attivati.");
+  }catch(e){alert("Impossibile attivare gli avvisi su questo dispositivo.")}
+};
+</script>
+</body>
+</html>

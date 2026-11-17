@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function utente() { return get(/databases/$(db)/documents/utenti/$(request.auth.uid)).data; }
+    function socio() { return request.auth != null && exists(/databases/$(db)/documents/utenti/$(request.auth.uid)); }
+    function admin() { return socio() && utente().ruolo == 'admin'; }
+
+    match /codici/{c} { allow read, write: if false; }
+
+    match /utenti/{u} {
+      allow read: if request.auth != null && request.auth.uid == u;
+      allow create: if request.auth != null && request.auth.uid == u
+        && exists(/databases/$(db)/documents/codici/$(request.resource.data.codice))
+        && get(/databases/$(db)/documents/codici/$(request.resource.data.codice)).data.ruolo == request.resource.data.ruolo;
+    }
+    match /serate/{s}   { allow read: if socio(); allow write: if admin(); }
+    match /messaggi/{m} { allow read: if socio(); allow write: if admin(); }
+    match /tokens/{t}   { allow create, update: if socio() && request.auth.uid == t; }
+  }
+}
