@@ -57,7 +57,7 @@ const firebaseConfig = {
 const VAPID = "BMJHRy38KuYwM2qALxRucre7xpYJYU0CwXLWtufw3i0Zg1BCaA6dI02BbgrsT2XBuO3DvRCouEjknm7IBe020XA";
 
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
-let ruolo=null,uid=null,tab="serate",open=null,form=false,editId=null,serate=[],msgs=[],unsub=[];
+let ruolo=null,uid=null,tab="serate",open=null,form=false,editId=null,editM=null,serate=[],msgs=[],unsub=[];
 const $=id=>document.getElementById(id),admin=()=>ruolo==="admin";
 const esc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fd=s=>new Date(s+"T12:00:00"),today=new Date().toISOString().slice(0,10);
@@ -107,7 +107,7 @@ window.esci=async()=>{
   unsub.forEach(f=>f());unsub=[];ruolo=null;uid=null;serate=[];msgs=[];tab="serate";open=null;form=false;
   try{await signOut(auth)}catch(e){alert("Uscita non riuscita. Riprova.")}
 };
-window.go=t=>{tab=t;open=null;form=false;editId=null;render()};
+window.go=t=>{tab=t;open=null;form=false;editId=null;editM=null;render()};
 window.openS=id=>{open=id;render()};
 window.showForm=id=>{form=true;editId=id||null;render()};
 window.annulla=()=>{form=false;editId=null;render()};
@@ -150,13 +150,25 @@ window.addS=async()=>{
 };
 window.delS=async id=>{if(confirm("Eliminare la serata?")){await deleteDoc(doc(db,"serate",id));open=null;render()}};
 function vMsg(){
+  const m0=editM?msgs.find(x=>x.id===editM):null;
   let h="<h2>Comunicazioni</h2>";
-  if(admin())h+='<div class="card"><label>Titolo</label><input id="m1"><label>Messaggio</label><textarea id="m2" rows="3"></textarea><button class="btn" onclick="addM()">Pubblica messaggio</button></div>';
-  return h+msgs.slice().reverse().map(m=>`<div class="card"><div class="row"><b>${esc(m.titolo)}</b><span class="mut">${fd(m.data).toLocaleDateString("it-IT",{day:"numeric",month:"short"})}</span></div><div>${esc(m.testo)}</div></div>`).join("");
+  if(admin())h+=`<div class="card"><label>Titolo</label><input id="m1" value="${m0?esc(m0.titolo):""}"><label>Messaggio</label><textarea id="m2" rows="3">${m0?esc(m0.testo):""}</textarea><button class="btn" onclick="addM()">${m0?"Salva modifiche":"Pubblica messaggio"}</button>${m0?'<button class="btn alt" onclick="annullaM()">Annulla</button>':""}</div>`;
+  return h+msgs.slice().reverse().map(m=>`<div class="card"><div class="row"><b>${esc(m.titolo)}</b><span class="mut">${fd(m.data).toLocaleDateString("it-IT",{day:"numeric",month:"short"})}</span></div><div>${esc(m.testo)}</div>${admin()?`<div style="margin-top:10px"><button class="btn alt" style="margin-bottom:0" onclick="editMsg('${m.id}')">Modifica</button><button class="btn alt" style="margin-bottom:0" onclick="delM('${m.id}')">Elimina</button></div>`:""}</div>`).join("");
 }
+window.editMsg=id=>{editM=id;render();window.scrollTo(0,0)};
+window.annullaM=()=>{editM=null;render()};
+window.delM=async id=>{
+  if(!confirm("Eliminare il messaggio?"))return;
+  try{await deleteDoc(doc(db,"messaggi",id));if(editM===id)editM=null;render()}
+  catch(e){alert("Eliminazione non riuscita. Controlla la connessione.")}
+};
 window.addM=async()=>{
   const t=$("m1").value.trim();if(!t){$("m1").focus();return}
-  await addDoc(collection(db,"messaggi"),{data:today,titolo:t,testo:$("m2").value});render();
+  try{
+    if(editM){await updateDoc(doc(db,"messaggi",editM),{titolo:t,testo:$("m2").value});editM=null}
+    else await addDoc(collection(db,"messaggi"),{data:today,titolo:t,testo:$("m2").value});
+    render()
+  }catch(e){alert("Salvataggio non riuscito. Controlla la connessione.")}
 };
 window.enablePush=async()=>{
   try{
