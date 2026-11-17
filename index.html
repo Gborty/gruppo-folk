@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#a3262a">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
 <title>Gruppo Folk</title>
 <style>
 :root{--bg:#f3f0f0;--surf:#fff;--ink:#2a1d1e;--mut:#6e5c5d;--g:#a3262a;--gl:#f6dcdb;--r:#a3262a;--yl:#f8ecd0;--line:#e0d3d3;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -36,12 +37,12 @@ nav button.on{color:var(--g);font-weight:700;border-top-color:var(--g)}
 </style>
 </head>
 <body>
-<header><h1>Gruppo Folk</h1><button class="btn alt" id="bell" style="display:none;margin:0" onclick="enablePush()">Attiva avvisi</button></header>
+<header><div><h1>Gruppo Folk</h1><div class="mut" id="who"></div></div><div style="display:flex;gap:6px"><button class="btn alt" id="bell" style="display:none;margin:0" onclick="enablePush()">Attiva avvisi</button><button class="btn alt" id="out" style="display:none;margin:0" onclick="esci()">Esci</button></div></header>
 <main id="app"><p class="mut">Caricamento…</p></main>
 <nav id="navwrap" style="display:none"><div id="nav"></div></nav>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import {getAuth,signInAnonymously,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getAuth,signInAnonymously,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {getFirestore,doc,getDoc,setDoc,addDoc,deleteDoc,collection,onSnapshot,query,orderBy} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {getMessaging,getToken,isSupported} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js";
 
@@ -71,7 +72,7 @@ onAuthStateChanged(auth,async u=>{
   catch(e){showLogin()}
 });
 function showLogin(){
-  $("navwrap").style.display="none";$("bell").style.display="none";
+  $("navwrap").style.display="none";$("bell").style.display="none";$("out").style.display="none";$("who").textContent="";
   $("app").innerHTML='<div class="card"><h2>Entra nel gruppo</h2><p class="mut">Inserisci il codice che ti ha dato il presidente.</p><input id="code" autocapitalize="characters" autocomplete="off" placeholder="Codice"><div class="err" id="err"></div><button class="btn" id="go">Entra</button></div>';
   $("go").onclick=login;
 }
@@ -88,7 +89,7 @@ async function login(){
   }catch(e){$("err").textContent="Connessione non riuscita. Riprova."}
 }
 function start(){
-  $("navwrap").style.display="block";$("bell").style.display="block";
+  $("navwrap").style.display="block";$("bell").style.display="block";$("out").style.display="block";$("who").textContent=ruolo==="admin"?"Accesso come presidente":"Accesso come socio";
   unsub.forEach(f=>f());
   unsub=[
     onSnapshot(query(collection(db,"serate"),orderBy("data")),s=>{serate=s.docs.map(d=>({id:d.id,...d.data()}));render()}),
@@ -101,6 +102,11 @@ function render(){
   $("nav").innerHTML=[["serate","Serate"],["msg","Messaggi"]].map(t=>`<button class="${tab===t[0]?"on":""}" onclick="go('${t[0]}')">${t[1]}</button>`).join("");
   $("app").innerHTML=tab==="serate"?vSerate():vMsg();
 }
+window.esci=async()=>{
+  if(!confirm("Vuoi uscire? Per rientrare dovrai inserire di nuovo il codice."))return;
+  unsub.forEach(f=>f());unsub=[];ruolo=null;uid=null;serate=[];msgs=[];tab="serate";open=null;form=false;
+  try{await signOut(auth)}catch(e){alert("Uscita non riuscita. Riprova.")}
+};
 window.go=t=>{tab=t;open=null;form=false;render()};
 window.openS=id=>{open=id;render()};
 window.showForm=()=>{form=true;render()};
